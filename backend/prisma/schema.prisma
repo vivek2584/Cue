@@ -1,0 +1,97 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String         @unique
+  passwordHash String         @map("password_hash")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  watchlists   Watchlist[]
+  chatMessages ChatMessage[]
+
+  @@map("users")
+}
+
+model ChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  sessionId String   @map("session_id")
+  role      String   // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+model Instrument {
+  symbol           String             @id
+  name             String
+  exchange         String
+  sector           String?
+  isActive         Boolean            @default(true) @map("is_active")
+  watchlistItems   WatchlistItem[]
+  priceSnapshots   PriceSnapshot[]
+  symbolStatsDaily SymbolStatsDaily[]
+
+  @@map("instruments")
+}
+
+model Watchlist {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  name      String          @default("My Watchlist")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WatchlistItem[]
+
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  watchlistId        String     @map("watchlist_id") @db.Uuid
+  symbol             String
+  addedAt            DateTime   @default(now()) @map("added_at") @db.Timestamptz
+  baselinePrice      Decimal    @map("baseline_price") @db.Decimal(18, 4)
+  baselineCapturedAt DateTime   @default(now()) @map("baseline_captured_at") @db.Timestamptz
+  lastViewedAt       DateTime   @default(now()) @map("last_viewed_at") @db.Timestamptz
+  watchlist          Watchlist  @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  instrument         Instrument @relation(fields: [symbol], references: [symbol])
+
+  @@unique([watchlistId, symbol])
+  @@map("watchlist_items")
+}
+
+model PriceSnapshot {
+  symbol     String
+  ts         DateTime   @db.Timestamptz
+  price      Decimal    @db.Decimal(18, 4)
+  volume     BigInt
+  source     String
+  instrument Instrument @relation(fields: [symbol], references: [symbol])
+
+  @@id([symbol, ts])
+  @@index([symbol, ts(sort: Desc)])
+  @@map("price_snapshots")
+}
+
+model SymbolStatsDaily {
+  symbol          String
+  date            DateTime   @db.Date
+  stddevReturn30d Decimal    @map("stddev_return_30d") @db.Decimal(10, 6)
+  avgVolume30d    BigInt     @map("avg_volume_30d")
+  high52w         Decimal    @map("high_52w") @db.Decimal(18, 4)
+  low52w          Decimal    @map("low_52w") @db.Decimal(18, 4)
+  instrument      Instrument @relation(fields: [symbol], references: [symbol])
+
+  @@id([symbol, date])
+  @@map("symbol_stats_daily")
+}
